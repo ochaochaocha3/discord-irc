@@ -39,6 +39,7 @@ describe('Bot', function () {
     discord.Client = createDiscordStub(this.sendStub, this.guild, this.discordUsers);
 
     ClientStub.prototype.say = sandbox.stub();
+    ClientStub.prototype.notice = sandbox.stub();
     ClientStub.prototype.send = sandbox.stub();
     ClientStub.prototype.join = sandbox.stub();
     this.sendWebhookMessageStub = sandbox.stub();
@@ -1008,4 +1009,108 @@ describe('Bot', function () {
       ClientStub.prototype.say.should.not.have.been.called;
     }
   );
+
+  it('should send messages to IRC as NOTICE if sendAsNotice is enabled', function () {
+    const text = 'testmessage';
+    const newConfig = { ...config, sendAsNotice: true };
+    const bot = new Bot(newConfig);
+    const message = {
+      content: text,
+      mentions: { users: [] },
+      channel: {
+        name: 'discord'
+      },
+      author: {
+        username: 'otherauthor',
+        id: 'not bot id'
+      },
+      guild: this.guild
+    };
+
+    bot.connect();
+    bot.sendToIRC(message);
+    // Wrap in colors:
+    const expected = `<\u000304${message.author.username}\u000f> ${text}`;
+    ClientStub.prototype.notice.should.have.been.calledWith('#irc', expected);
+  });
+
+  it('should send commands to IRC as NOTICE if sendAsNotice is enabled', function () {
+    const text = '!test command';
+    const newConfig = { ...config, sendAsNotice: true };
+    const bot = new Bot(newConfig);
+    const message = {
+      content: text,
+      mentions: { users: [] },
+      channel: {
+        name: 'discord'
+      },
+      author: {
+        username: 'test',
+        id: 'not bot id'
+      },
+      guild: this.guild
+    };
+
+    bot.connect();
+    bot.sendToIRC(message);
+    ClientStub.prototype.notice.getCall(0).args.should.deep.equal([
+      '#irc', 'Command sent from Discord by test:'
+    ]);
+    ClientStub.prototype.notice.getCall(1).args.should.deep.equal(['#irc', text]);
+  });
+
+  it('should send attachment URL to IRC as NOTICE if sendAsNotice is enabled', function () {
+    const attachmentUrl = 'https://image/url.jpg';
+    const newConfig = { ...config, sendAsNotice: true };
+    const bot = new Bot(newConfig);
+    const message = {
+      content: '',
+      mentions: { users: [] },
+      attachments: createAttachments(attachmentUrl),
+      channel: {
+        name: 'discord'
+      },
+      author: {
+        username: 'otherauthor',
+        id: 'not bot id'
+      },
+      guild: this.guild
+    };
+
+    bot.connect();
+    bot.sendToIRC(message);
+    const expected = `<\u000304${message.author.username}\u000f> ${attachmentUrl}`;
+    ClientStub.prototype.notice.should.have.been.calledWith('#irc', expected);
+  });
+
+  it('should send text message and attachment URL to IRC as NOTICE if both exist and sendAsNotice is enabled', function () {
+    const text = 'Look at this cute cat picture!';
+    const attachmentUrl = 'https://image/url.jpg';
+    const newConfig = { ...config, sendAsNotice: true };
+    const bot = new Bot(newConfig);
+    const message = {
+      content: text,
+      attachments: createAttachments(attachmentUrl),
+      mentions: { users: [] },
+      channel: {
+        name: 'discord'
+      },
+      author: {
+        username: 'otherauthor',
+        id: 'not bot id'
+      },
+      guild: this.guild
+    };
+
+    bot.connect();
+    bot.sendToIRC(message);
+
+    ClientStub.prototype.notice.should.have.been.calledWith(
+      '#irc',
+      `<\u000304${message.author.username}\u000f> ${text}`
+    );
+
+    const expected = `<\u000304${message.author.username}\u000f> ${attachmentUrl}`;
+    ClientStub.prototype.notice.should.have.been.calledWith('#irc', expected);
+  });
 });
